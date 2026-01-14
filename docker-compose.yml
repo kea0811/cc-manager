@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ccadmin
+      MONGO_INITDB_ROOT_PASSWORD: ccmanager2024
+      MONGO_INITDB_DATABASE: cc_manager
+    volumes:
+      - mongodb-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -9,13 +26,15 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=production
-      - DATABASE_PATH=/data/cc-manager.db
+      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@mongodb:27017/cc_manager?authSource=admin
       - WORKSPACE_PATH=/workspace
       # Support both token variable names for compatibility
       - CLAUDE_CODE_TOKEN=${CLAUDE_CODE_TOKEN:-}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_TOKEN:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     volumes:
-      - cc-manager-data:/data
       - cc-workspace:/workspace
       # Mount Docker socket for spawning development containers
       - /var/run/docker.sock:/var/run/docker.sock
@@ -44,17 +63,19 @@ services:
       - VITE_API_URL=http://backend:3001
     restart: unless-stopped
 
-  # E2E Test Backend - uses isolated temp database
+  # E2E Test Backend - uses test MongoDB database
   backend-test:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
       - NODE_ENV=production
-      - DATABASE_PATH=/tmp/e2e-test.db
+      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@mongodb:27017/cc_manager_test?authSource=admin
       - CLAUDE_CODE_TOKEN=${CLAUDE_CODE_TOKEN:-}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_TOKEN:-}
-    # No volume - database is ephemeral in /tmp
+    depends_on:
+      mongodb:
+        condition: service_healthy
     profiles:
       - test
 
@@ -89,5 +110,5 @@ services:
       - test
 
 volumes:
-  cc-manager-data:
+  mongodb-data:
   cc-workspace:

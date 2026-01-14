@@ -44,20 +44,20 @@ export const resetClaudeServiceFactory = (): void => {
 const router = Router();
 
 // GET /api/projects - List all projects
-router.get('/', (_req, res) => {
-  const projects = projectService.getAllProjects();
+router.get('/', async (_req, res) => {
+  const projects = await projectService.getAllProjects();
   res.json(projects);
 });
 
 // POST /api/projects - Create a new project
-router.post('/', validateBody(CreateProjectSchema), (req, res) => {
-  const project = projectService.createProject(req.body);
+router.post('/', validateBody(CreateProjectSchema), async (req, res) => {
+  const project = await projectService.createProject(req.body);
   res.status(201).json(project);
 });
 
 // GET /api/projects/:id - Get a single project
-router.get('/:id', (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.get('/:id', async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -66,8 +66,8 @@ router.get('/:id', (req, res) => {
 });
 
 // PATCH /api/projects/:id - Update a project
-router.patch('/:id', validateBody(UpdateProjectSchema), (req, res) => {
-  const project = projectService.updateProject(req.params.id, req.body);
+router.patch('/:id', validateBody(UpdateProjectSchema), async (req, res) => {
+  const project = await projectService.updateProject(req.params.id, req.body);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -76,8 +76,8 @@ router.patch('/:id', validateBody(UpdateProjectSchema), (req, res) => {
 });
 
 // DELETE /api/projects/:id - Delete a project
-router.delete('/:id', (req, res) => {
-  const deleted = projectService.deleteProject(req.params.id);
+router.delete('/:id', async (req, res) => {
+  const deleted = await projectService.deleteProject(req.params.id);
   if (!deleted) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -86,8 +86,8 @@ router.delete('/:id', (req, res) => {
 });
 
 // PUT /api/projects/:id/editor - Update editor content
-router.put('/:id/editor', validateBody(UpdateEditorSchema), (req, res) => {
-  const project = projectService.updateEditorContent(req.params.id, req.body.content);
+router.put('/:id/editor', validateBody(UpdateEditorSchema), async (req, res) => {
+  const project = await projectService.updateEditorContent(req.params.id, req.body.content);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -96,13 +96,13 @@ router.put('/:id/editor', validateBody(UpdateEditorSchema), (req, res) => {
 });
 
 // GET /api/projects/:id/chat - Get chat history
-router.get('/:id/chat', (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.get('/:id/chat', async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  const messages = chatService.getChatHistory(req.params.id);
+  const messages = await chatService.getChatHistory(req.params.id);
   res.json(messages);
 });
 
@@ -112,24 +112,24 @@ const ChatMessageBodySchema = z.object({
   content: z.string().min(1),
 });
 
-router.post('/:id/chat', validateBody(ChatMessageBodySchema), (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.post('/:id/chat', validateBody(ChatMessageBodySchema), async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  const message = chatService.addChatMessage(req.params.id, req.body);
+  const message = await chatService.addChatMessage(req.params.id, req.body);
   res.status(201).json(message);
 });
 
 // DELETE /api/projects/:id/chat - Clear chat history
-router.delete('/:id/chat', (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.delete('/:id/chat', async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  chatService.deleteChatHistory(req.params.id);
+  await chatService.deleteChatHistory(req.params.id);
   res.status(204).send();
 });
 
@@ -156,14 +156,14 @@ const extractMarkdownFromResponse = (response: string): { explanation: string; m
 };
 
 router.post('/:id/process', validateBody(ProcessInputSchema), async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
 
   // Store the user message
-  const userMessage = chatService.addChatMessage(req.params.id, {
+  const userMessage = await chatService.addChatMessage(req.params.id, {
     role: 'user',
     content: req.body.content,
   });
@@ -178,7 +178,7 @@ router.post('/:id/process', validateBody(ProcessInputSchema), async (req, res) =
   );
 
   if (!response.success) {
-    const errorMessage = chatService.addChatMessage(req.params.id, {
+    const errorMessage = await chatService.addChatMessage(req.params.id, {
       role: 'assistant',
       content: `Error: ${response.error}`,
     });
@@ -200,12 +200,12 @@ router.post('/:id/process', validateBody(ProcessInputSchema), async (req, res) =
   if (markdown) {
     diff = computeDiff(project.editorContent, markdown);
     if (diff.hasChanges) {
-      updatedProject = projectService.updateEditorContent(req.params.id, markdown) || project;
+      updatedProject = await projectService.updateEditorContent(req.params.id, markdown) || project;
     }
   }
 
   // Store assistant response with full explanation (thoughts + suggestions)
-  const assistantMessage = chatService.addChatMessage(req.params.id, {
+  const assistantMessage = await chatService.addChatMessage(req.params.id, {
     role: 'assistant',
     content: explanation || (diff.hasChanges
       ? `Updated the document (+${diff.addedLines} lines, -${diff.removedLines} lines)`
@@ -225,8 +225,8 @@ router.post('/:id/process', validateBody(ProcessInputSchema), async (req, res) =
 const activeStreams = new Map<string, { abort: () => void; process: ChildProcess }>();
 
 // GET /api/projects/:id/stream - SSE endpoint for streaming Claude responses
-router.get('/:id/stream', (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.get('/:id/stream', async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -249,7 +249,7 @@ router.get('/:id/stream', (req, res) => {
   const streamId = `${req.params.id}-${Date.now()}`;
 
   // Store user message immediately
-  const userMessage = chatService.addChatMessage(req.params.id, {
+  const userMessage = await chatService.addChatMessage(req.params.id, {
     role: 'user',
     content,
   });
@@ -279,11 +279,11 @@ router.get('/:id/stream', (req, res) => {
           currentToolName = event.tool_name;
         }
       },
-      onError: (error: Error) => {
+      onError: async (error: Error) => {
         res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
 
         // Save error as assistant message
-        const errorMessage = chatService.addChatMessage(req.params.id, {
+        const errorMessage = await chatService.addChatMessage(req.params.id, {
           role: 'assistant',
           content: `Error: ${error.message}`,
         });
@@ -292,7 +292,7 @@ router.get('/:id/stream', (req, res) => {
         res.end();
         activeStreams.delete(streamId);
       },
-      onComplete: (completeContent: string) => {
+      onComplete: async (completeContent: string) => {
         // Parse response for markdown extraction
         const { explanation, markdown } = extractMarkdownFromResponse(completeContent);
 
@@ -301,7 +301,7 @@ router.get('/:id/stream', (req, res) => {
         if (markdown) {
           const diff = computeDiff(project.editorContent, markdown);
           if (diff.hasChanges) {
-            const updatedProject = projectService.updateEditorContent(req.params.id, markdown);
+            const updatedProject = await projectService.updateEditorContent(req.params.id, markdown);
             editorUpdate = {
               content: updatedProject?.editorContent || markdown,
               diff,
@@ -310,7 +310,7 @@ router.get('/:id/stream', (req, res) => {
         }
 
         // Save assistant message
-        const assistantMessage = chatService.addChatMessage(req.params.id, {
+        const assistantMessage = await chatService.addChatMessage(req.params.id, {
           role: 'assistant',
           content: explanation || 'Response completed.',
         });
@@ -364,7 +364,7 @@ type DevPhase = 'setup' | 'development' | 'code_review' | 'unit_tests' | 'e2e_te
 
 // GET /api/projects/:id/develop-stream - SSE endpoint for streaming development
 router.get('/:id/develop-stream', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -419,7 +419,7 @@ router.get('/:id/develop-stream', async (req, res) => {
     sendEvent('init', { projectId, projectName: project.name });
 
     // Get all tasks
-    let tasks = kanbanService.getTasksByProject(projectId);
+    let tasks = await kanbanService.getTasksByProject(projectId);
     const todoTasks = tasks.filter(t => t.status === 'todo');
 
     sendEvent('tasks', {
@@ -435,7 +435,7 @@ router.get('/:id/develop-stream', async (req, res) => {
       currentContainerName = `claude-dev-${Date.now()}`;
 
       // Move to WIP
-      kanbanService.moveTask(task.id, 'wip', 0);
+      await kanbanService.moveTask(task.id, 'wip', 0);
       sendEvent('task_start', {
         taskId: task.id,
         taskTitle: task.title,
@@ -461,8 +461,8 @@ After implementing, stage and commit your changes with message: "feat: ${task.ti
         {
           onSetup: (phase) => sendEvent('setup', { message: phase }),
           onEvent: (event) => sendEvent('claude', event),
-          onCommit: (commitUrl) => {
-            kanbanService.updateTaskCommitUrl(task.id, commitUrl);
+          onCommit: async (commitUrl) => {
+            await kanbanService.updateTaskCommitUrl(task.id, commitUrl);
             sendEvent('commit', { taskId: task.id, commitUrl });
           },
           onError: (error) => sendEvent('error', { message: error.message }),
@@ -475,7 +475,7 @@ After implementing, stage and commit your changes with message: "feat: ${task.ti
       currentContainerName = null;
 
       if (result.success) {
-        kanbanService.moveTask(task.id, 'done', 0);
+        await kanbanService.moveTask(task.id, 'done', 0);
         sendEvent('task_complete', { taskId: task.id, status: 'done', commitUrl: result.commitUrl });
       } else {
         sendEvent('task_failed', { taskId: task.id, message: 'Development failed' });
@@ -491,10 +491,10 @@ After implementing, stage and commit your changes with message: "feat: ${task.ti
 
     // Phase 2: Code Review - move all done tasks to code_review
     sendEvent('phase', { phase: 'code_review' as DevPhase, message: 'Moving to code review' });
-    tasks = kanbanService.getTasksByProject(projectId);
+    tasks = await kanbanService.getTasksByProject(projectId);
     const doneTasks = tasks.filter(t => t.status === 'done');
     for (const task of doneTasks) {
-      kanbanService.moveTask(task.id, 'code_review', 0);
+      await kanbanService.moveTask(task.id, 'code_review', 0);
       sendEvent('task_moved', { taskId: task.id, status: 'code_review' });
     }
 
@@ -523,9 +523,9 @@ Commit any test setup changes.`;
     currentContainerName = null;
 
     if (testResult.success && !isAborted) {
-      tasks = kanbanService.getTasksByProject(projectId);
+      tasks = await kanbanService.getTasksByProject(projectId);
       for (const task of tasks.filter(t => t.status === 'code_review')) {
-        kanbanService.moveTask(task.id, 'done_unit_test', 0);
+        await kanbanService.moveTask(task.id, 'done_unit_test', 0);
         sendEvent('task_moved', { taskId: task.id, status: 'done_unit_test' });
       }
     }
@@ -561,9 +561,9 @@ Commit any test setup changes.`;
     currentContainerName = null;
 
     if (e2eResult.success && !isAborted) {
-      tasks = kanbanService.getTasksByProject(projectId);
+      tasks = await kanbanService.getTasksByProject(projectId);
       for (const task of tasks.filter(t => t.status === 'done_unit_test')) {
-        kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
+        await kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
         sendEvent('task_moved', { taskId: task.id, status: 'done_e2e_testing' });
       }
     }
@@ -604,14 +604,14 @@ Report what you did.`;
     currentContainerName = null;
 
     if (deployResult.success && !isAborted) {
-      tasks = kanbanService.getTasksByProject(projectId);
+      tasks = await kanbanService.getTasksByProject(projectId);
       for (const task of tasks.filter(t => t.status === 'done_e2e_testing')) {
-        kanbanService.moveTask(task.id, 'deploy', 0);
+        await kanbanService.moveTask(task.id, 'deploy', 0);
         sendEvent('task_moved', { taskId: task.id, status: 'deploy' });
       }
 
       // Update project status
-      projectService.updateProject(projectId, {
+      await projectService.updateProject(projectId, {
         status: 'deployed',
         deployedUrl: `${targetPath}/${projectName}`,
       });
@@ -650,8 +650,8 @@ const DiffQuerySchema = z.object({
   newContent: z.string(),
 });
 
-router.post('/:id/diff', validateBody(DiffQuerySchema), (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.post('/:id/diff', validateBody(DiffQuerySchema), async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -665,7 +665,7 @@ router.post('/:id/diff', validateBody(DiffQuerySchema), (req, res) => {
 
 // POST /api/projects/:id/start-develop - Analyze PRD and create tasks
 router.post('/:id/start-develop', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -710,17 +710,19 @@ router.post('/:id/start-develop', async (req, res) => {
     }
 
     // Create kanban tasks
-    const createdTasks = tasks.map((task) =>
-      kanbanService.createTask(req.params.id, {
-        title: task.title,
-        description: task.description,
-        status: 'todo',
-      })
+    const createdTasks = await Promise.all(
+      tasks.map((task) =>
+        kanbanService.createTask(req.params.id, {
+          title: task.title,
+          description: task.description,
+          status: 'todo',
+        })
+      )
     );
 
     // Update project status to development if it has a repo
     if (project.githubRepo && project.status === 'draft') {
-      projectService.updateProject(req.params.id, { status: 'development' });
+      await projectService.updateProject(req.params.id, { status: 'development' });
     }
 
     res.json({ success: true, tasks: createdTasks });
@@ -731,7 +733,7 @@ router.post('/:id/start-develop', async (req, res) => {
 
 // POST /api/projects/:id/develop-next - Develop the next task in WIP or move one from Todo
 router.post('/:id/develop-next', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -742,7 +744,7 @@ router.post('/:id/develop-next', async (req, res) => {
     return;
   }
 
-  const allTasks = kanbanService.getTasksByProject(req.params.id);
+  const allTasks = await kanbanService.getTasksByProject(req.params.id);
 
   // Find task to work on: first check WIP, then get first from Todo
   let task = allTasks.find((t) => t.status === 'wip');
@@ -754,7 +756,11 @@ router.post('/:id/develop-next', async (req, res) => {
       return;
     }
     // Move to WIP
-    task = kanbanService.moveTask(todoTask.id, 'wip', 0)!;
+    task = await kanbanService.moveTask(todoTask.id, 'wip', 0);
+    if (!task) {
+      res.status(500).json({ error: 'Failed to move task to WIP' });
+      return;
+    }
   }
 
   const claudeService = claudeServiceFactory(project);
@@ -772,7 +778,7 @@ router.post('/:id/develop-next', async (req, res) => {
     }
 
     // Move task to done after successful development
-    const updatedTask = kanbanService.moveTask(task.id, 'done', 0);
+    const updatedTask = await kanbanService.moveTask(task.id, 'done', 0);
 
     res.json({
       success: true,
@@ -787,7 +793,7 @@ router.post('/:id/develop-next', async (req, res) => {
 
 // POST /api/projects/:id/develop-all - Develop all tasks sequentially (background job)
 router.post('/:id/develop-all', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -808,13 +814,14 @@ router.post('/:id/develop-all', async (req, res) => {
 
     // Phase 1: Develop all tasks in Docker (Todo -> WIP -> Done)
     while (true) {
-      const allTasks = kanbanService.getTasksByProject(projectId);
+      const allTasks = await kanbanService.getTasksByProject(projectId);
       const todoTask = allTasks.find((t) => t.status === 'todo');
 
       if (!todoTask) break;
 
       // Move to WIP
-      const wipTask = kanbanService.moveTask(todoTask.id, 'wip', 0)!;
+      const wipTask = await kanbanService.moveTask(todoTask.id, 'wip', 0);
+      if (!wipTask) continue;
 
       try {
         // Build prompt for this task
@@ -843,11 +850,11 @@ After implementing, stage and commit your changes with message: "feat: ${wipTask
 
         // Store commit URL if available
         if (response.commitUrl) {
-          kanbanService.updateTaskCommitUrl(wipTask.id, response.commitUrl);
+          await kanbanService.updateTaskCommitUrl(wipTask.id, response.commitUrl);
         }
 
         // Move to done
-        kanbanService.moveTask(wipTask.id, 'done', 0);
+        await kanbanService.moveTask(wipTask.id, 'done', 0);
       } catch (err) {
         // On error, kill container and leave in WIP for manual review
         await claudeService.killContainer();
@@ -858,10 +865,10 @@ After implementing, stage and commit your changes with message: "feat: ${wipTask
 
     // Phase 2: Code Review - move all done tasks to code_review
     console.log('[CC-Manager] Phase 2: Moving tasks to code_review');
-    let tasks = kanbanService.getTasksByProject(projectId);
+    let tasks = await kanbanService.getTasksByProject(projectId);
     const doneTasks = tasks.filter((t) => t.status === 'done');
     for (const task of doneTasks) {
-      kanbanService.moveTask(task.id, 'code_review', 0);
+      await kanbanService.moveTask(task.id, 'code_review', 0);
     }
     console.log(`[CC-Manager] Moved ${doneTasks.length} tasks to code_review`);
 
@@ -879,9 +886,9 @@ Commit any test setup changes.`;
       console.log('[CC-Manager] Unit tests result:', testResponse.success ? 'PASSED' : 'FAILED');
 
       if (testResponse.success) {
-        tasks = kanbanService.getTasksByProject(projectId);
+        tasks = await kanbanService.getTasksByProject(projectId);
         for (const task of tasks.filter((t) => t.status === 'code_review')) {
-          kanbanService.moveTask(task.id, 'done_unit_test', 0);
+          await kanbanService.moveTask(task.id, 'done_unit_test', 0);
         }
       } else {
         console.error('[CC-Manager] Unit tests failed:', testResponse.error);
@@ -906,9 +913,9 @@ Commit any test setup changes.`;
       console.log('[CC-Manager] E2E tests result:', e2eResponse.success ? 'PASSED' : 'FAILED');
 
       if (e2eResponse.success) {
-        tasks = kanbanService.getTasksByProject(projectId);
+        tasks = await kanbanService.getTasksByProject(projectId);
         for (const task of tasks.filter((t) => t.status === 'done_unit_test')) {
-          kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
+          await kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
         }
       } else {
         console.error('[CC-Manager] E2E tests failed:', e2eResponse.error);
@@ -937,9 +944,9 @@ Report what you did.`;
       console.log('[CC-Manager] Deploy result:', deployResponse.success ? 'SUCCESS' : 'FAILED');
 
       if (deployResponse.success) {
-        tasks = kanbanService.getTasksByProject(projectId);
+        tasks = await kanbanService.getTasksByProject(projectId);
         for (const task of tasks.filter((t) => t.status === 'done_e2e_testing')) {
-          kanbanService.moveTask(task.id, 'deploy', 0);
+          await kanbanService.moveTask(task.id, 'deploy', 0);
         }
         console.log('[CC-Manager] All tasks deployed successfully!');
       } else {
@@ -956,7 +963,7 @@ Report what you did.`;
 
 // POST /api/projects/:id/continue - Continue workflow from current state
 router.post('/:id/continue', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -967,7 +974,7 @@ router.post('/:id/continue', async (req, res) => {
     return;
   }
 
-  const tasks = kanbanService.getTasksByProject(req.params.id);
+  const tasks = await kanbanService.getTasksByProject(req.params.id);
   const statusCounts = {
     todo: tasks.filter(t => t.status === 'todo').length,
     wip: tasks.filter(t => t.status === 'wip').length,
@@ -1009,7 +1016,7 @@ router.post('/:id/continue', async (req, res) => {
     if (nextPhase === 'code_review') {
       // Move done -> code_review and run tests
       for (const task of tasks.filter(t => t.status === 'done')) {
-        kanbanService.moveTask(task.id, 'code_review', 0);
+        await kanbanService.moveTask(task.id, 'code_review', 0);
       }
       nextPhase = 'unit_tests';
     }
@@ -1022,9 +1029,9 @@ router.post('/:id/continue', async (req, res) => {
       await claudeService.killContainer();
 
       if (testResponse.success) {
-        const currentTasks = kanbanService.getTasksByProject(projectId);
+        const currentTasks = await kanbanService.getTasksByProject(projectId);
         for (const task of currentTasks.filter(t => t.status === 'code_review')) {
-          kanbanService.moveTask(task.id, 'done_unit_test', 0);
+          await kanbanService.moveTask(task.id, 'done_unit_test', 0);
         }
         nextPhase = 'e2e_tests';
       } else {
@@ -1041,9 +1048,9 @@ router.post('/:id/continue', async (req, res) => {
       await claudeService.killContainer();
 
       if (e2eResponse.success) {
-        const currentTasks = kanbanService.getTasksByProject(projectId);
+        const currentTasks = await kanbanService.getTasksByProject(projectId);
         for (const task of currentTasks.filter(t => t.status === 'done_unit_test')) {
-          kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
+          await kanbanService.moveTask(task.id, 'done_e2e_testing', 0);
         }
         nextPhase = 'deploy';
       } else {
@@ -1061,9 +1068,9 @@ router.post('/:id/continue', async (req, res) => {
       await claudeService.killContainer();
 
       if (deployResponse.success) {
-        const currentTasks = kanbanService.getTasksByProject(projectId);
+        const currentTasks = await kanbanService.getTasksByProject(projectId);
         for (const task of currentTasks.filter(t => t.status === 'done_e2e_testing')) {
-          kanbanService.moveTask(task.id, 'deploy', 0);
+          await kanbanService.moveTask(task.id, 'deploy', 0);
         }
         console.log('[CC-Manager] Deployment complete!');
       }
@@ -1075,7 +1082,7 @@ router.post('/:id/continue', async (req, res) => {
 
 // POST /api/projects/:id/deploy - Deploy project to NAS
 router.post('/:id/deploy', async (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
@@ -1094,17 +1101,16 @@ router.post('/:id/deploy', async (req, res) => {
     }
 
     // Move all tasks to deploy status
-    const allTasks = kanbanService.getTasksByProject(req.params.id);
+    const allTasks = await kanbanService.getTasksByProject(req.params.id);
     for (const task of allTasks) {
       if (task.status !== 'deploy') {
-        kanbanService.moveTask(task.id, 'deploy', 0);
+        await kanbanService.moveTask(task.id, 'deploy', 0);
       }
     }
 
     // Update project status to deployed and set the deployed URL
     // The deployed URL is typically the project running on a specific port
-    const deployedUrl = `http://192.168.1.100:${3010 + Math.floor(Math.random() * 90)}`; // Placeholder - real URL would come from docker compose
-    projectService.updateProject(req.params.id, {
+    await projectService.updateProject(req.params.id, {
       status: 'deployed',
       deployedUrl: `${targetPath}/${projectName}`,
     });
@@ -1118,30 +1124,30 @@ router.post('/:id/deploy', async (req, res) => {
 // ============ Kanban Routes ============
 
 // GET /api/projects/:id/kanban - Get all tasks for a project
-router.get('/:id/kanban', (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.get('/:id/kanban', async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  const tasks = kanbanService.getTasksByProject(req.params.id);
+  const tasks = await kanbanService.getTasksByProject(req.params.id);
   res.json(tasks);
 });
 
 // POST /api/projects/:id/kanban - Create a new task
-router.post('/:id/kanban', validateBody(CreateKanbanTaskSchema), (req, res) => {
-  const project = projectService.getProjectById(req.params.id);
+router.post('/:id/kanban', validateBody(CreateKanbanTaskSchema), async (req, res) => {
+  const project = await projectService.getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  const task = kanbanService.createTask(req.params.id, req.body);
+  const task = await kanbanService.createTask(req.params.id, req.body);
   res.status(201).json(task);
 });
 
 // GET /api/projects/:id/kanban/:taskId - Get a single task
-router.get('/:id/kanban/:taskId', (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.get('/:id/kanban/:taskId', async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
@@ -1150,70 +1156,70 @@ router.get('/:id/kanban/:taskId', (req, res) => {
 });
 
 // PATCH /api/projects/:id/kanban/:taskId - Update a task
-router.patch('/:id/kanban/:taskId', validateBody(UpdateKanbanTaskSchema), (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.patch('/:id/kanban/:taskId', validateBody(UpdateKanbanTaskSchema), async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  const updated = kanbanService.updateTask(req.params.taskId, req.body);
+  const updated = await kanbanService.updateTask(req.params.taskId, req.body);
   res.json(updated);
 });
 
 // PUT /api/projects/:id/kanban/:taskId/move - Move task to different column/position
-router.put('/:id/kanban/:taskId/move', validateBody(MoveTaskSchema), (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.put('/:id/kanban/:taskId/move', validateBody(MoveTaskSchema), async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  const moved = kanbanService.moveTask(req.params.taskId, req.body.status, req.body.position);
+  const moved = await kanbanService.moveTask(req.params.taskId, req.body.status, req.body.position);
   res.json(moved);
 });
 
 // DELETE /api/projects/:id/kanban/:taskId - Delete a task
-router.delete('/:id/kanban/:taskId', (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.delete('/:id/kanban/:taskId', async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  kanbanService.deleteTask(req.params.taskId);
+  await kanbanService.deleteTask(req.params.taskId);
   res.status(204).send();
 });
 
 // ============ Task Comment Routes ============
 
 // GET /api/projects/:id/kanban/:taskId/comments - Get all comments for a task
-router.get('/:id/kanban/:taskId/comments', (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.get('/:id/kanban/:taskId/comments', async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  const comments = kanbanService.getCommentsByTask(req.params.taskId);
+  const comments = await kanbanService.getCommentsByTask(req.params.taskId);
   res.json(comments);
 });
 
 // POST /api/projects/:id/kanban/:taskId/comments - Add a comment to a task
-router.post('/:id/kanban/:taskId/comments', validateBody(CreateTaskCommentSchema), (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.post('/:id/kanban/:taskId/comments', validateBody(CreateTaskCommentSchema), async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  const comment = kanbanService.createComment(req.params.taskId, req.body);
+  const comment = await kanbanService.createComment(req.params.taskId, req.body);
   res.status(201).json(comment);
 });
 
 // DELETE /api/projects/:id/kanban/:taskId/comments/:commentId - Delete a comment
-router.delete('/:id/kanban/:taskId/comments/:commentId', (req, res) => {
-  const task = kanbanService.getTaskById(req.params.taskId);
+router.delete('/:id/kanban/:taskId/comments/:commentId', async (req, res) => {
+  const task = await kanbanService.getTaskById(req.params.taskId);
   if (!task || task.projectId !== req.params.id) {
     res.status(404).json({ error: 'Task not found' });
     return;
   }
-  const deleted = kanbanService.deleteComment(req.params.commentId);
+  const deleted = await kanbanService.deleteComment(req.params.commentId);
   if (!deleted) {
     res.status(404).json({ error: 'Comment not found' });
     return;

@@ -1,44 +1,31 @@
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, mapChatMessageRow } from '../db/index.js';
+import { ChatMessageModel, mapChatMessageDoc } from '../db/index.js';
 import type { ChatMessage, CreateChatMessage } from '../types/index.js';
 
-const now = (): string => new Date().toISOString();
-
-export const getChatHistory = (projectId: string): ChatMessage[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_messages WHERE project_id = ? ORDER BY created_at ASC')
-    .all(projectId) as Record<string, unknown>[];
-  return rows.map(mapChatMessageRow);
+export const getChatHistory = async (projectId: string): Promise<ChatMessage[]> => {
+  const docs = await ChatMessageModel.find({ projectId }).sort({ createdAt: 1 });
+  return docs.map(mapChatMessageDoc);
 };
 
-export const addChatMessage = (projectId: string, data: CreateChatMessage): ChatMessage => {
+export const addChatMessage = async (projectId: string, data: CreateChatMessage): Promise<ChatMessage> => {
   const id = uuidv4();
-  const timestamp = now();
 
-  getDb().prepare(`
-    INSERT INTO chat_messages (id, project_id, role, content, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, projectId, data.role, data.content, timestamp);
-
-  return {
-    id,
+  const doc = await ChatMessageModel.create({
+    _id: id,
     projectId,
     role: data.role,
     content: data.content,
-    createdAt: timestamp,
-  };
+  });
+
+  return mapChatMessageDoc(doc);
 };
 
-export const deleteChatHistory = (projectId: string): number => {
-  const result = getDb()
-    .prepare('DELETE FROM chat_messages WHERE project_id = ?')
-    .run(projectId);
-  return result.changes;
+export const deleteChatHistory = async (projectId: string): Promise<number> => {
+  const result = await ChatMessageModel.deleteMany({ projectId });
+  return result.deletedCount;
 };
 
-export const getChatMessageById = (id: string): ChatMessage | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM chat_messages WHERE id = ?')
-    .get(id) as Record<string, unknown> | undefined;
-  return row ? mapChatMessageRow(row) : null;
+export const getChatMessageById = async (id: string): Promise<ChatMessage | null> => {
+  const doc = await ChatMessageModel.findById(id);
+  return doc ? mapChatMessageDoc(doc) : null;
 };

@@ -25,11 +25,16 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // Initialize database and start server
-const start = (): void => {
-  initDb();
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+const start = async (): Promise<void> => {
+  try {
+    await initDb();
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 };
 
 // Export for testing

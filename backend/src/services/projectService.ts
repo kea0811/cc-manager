@@ -1,90 +1,58 @@
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, mapProjectRow } from '../db/index.js';
+import { ProjectModel, mapProjectDoc } from '../db/index.js';
 import type { Project, CreateProject, UpdateProject } from '../types/index.js';
 
-const now = (): string => new Date().toISOString();
-
-export const getAllProjects = (): Project[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM projects ORDER BY updated_at DESC')
-    .all() as Record<string, unknown>[];
-  return rows.map(mapProjectRow);
+export const getAllProjects = async (): Promise<Project[]> => {
+  const docs = await ProjectModel.find().sort({ updatedAt: -1 });
+  return docs.map(mapProjectDoc);
 };
 
-export const getProjectById = (id: string): Project | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM projects WHERE id = ?')
-    .get(id) as Record<string, unknown> | undefined;
-  return row ? mapProjectRow(row) : null;
+export const getProjectById = async (id: string): Promise<Project | null> => {
+  const doc = await ProjectModel.findById(id);
+  return doc ? mapProjectDoc(doc) : null;
 };
 
-export const createProject = (data: CreateProject): Project => {
+export const createProject = async (data: CreateProject): Promise<Project> => {
   const id = uuidv4();
-  const timestamp = now();
 
-  getDb().prepare(`
-    INSERT INTO projects (id, name, description, status, editor_content, created_at, updated_at)
-    VALUES (?, ?, ?, 'draft', '', ?, ?)
-  `).run(id, data.name, data.description || null, timestamp, timestamp);
+  const doc = await ProjectModel.create({
+    _id: id,
+    name: data.name,
+    description: data.description || null,
+    status: 'draft',
+    editorContent: '',
+  });
 
-  return getProjectById(id)!;
+  return mapProjectDoc(doc);
 };
 
-export const updateProject = (id: string, data: UpdateProject): Project | null => {
-  const existing = getProjectById(id);
-  if (!existing) return null;
+export const updateProject = async (id: string, data: UpdateProject): Promise<Project | null> => {
+  const updateData: Record<string, unknown> = {};
 
-  const updates: string[] = [];
-  const values: unknown[] = [];
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.githubRepo !== undefined) updateData.githubRepo = data.githubRepo;
+  if (data.status !== undefined) updateData.status = data.status;
+  if (data.deployedUrl !== undefined) updateData.deployedUrl = data.deployedUrl;
 
-  if (data.name !== undefined) {
-    updates.push('name = ?');
-    values.push(data.name);
-  }
-  if (data.description !== undefined) {
-    updates.push('description = ?');
-    values.push(data.description);
-  }
-  if (data.githubRepo !== undefined) {
-    updates.push('github_repo = ?');
-    values.push(data.githubRepo);
-  }
-  if (data.status !== undefined) {
-    updates.push('status = ?');
-    values.push(data.status);
-  }
-  if (data.deployedUrl !== undefined) {
-    updates.push('deployed_url = ?');
-    values.push(data.deployedUrl);
+  if (Object.keys(updateData).length === 0) {
+    return getProjectById(id);
   }
 
-  if (updates.length === 0) return existing;
-
-  updates.push('updated_at = ?');
-  values.push(now());
-  values.push(id);
-
-  getDb().prepare(`
-    UPDATE projects SET ${updates.join(', ')} WHERE id = ?
-  `).run(...values);
-
-  return getProjectById(id);
+  const doc = await ProjectModel.findByIdAndUpdate(id, updateData, { new: true });
+  return doc ? mapProjectDoc(doc) : null;
 };
 
-export const deleteProject = (id: string): boolean => {
-  const result = getDb()
-    .prepare('DELETE FROM projects WHERE id = ?')
-    .run(id);
-  return result.changes > 0;
+export const deleteProject = async (id: string): Promise<boolean> => {
+  const result = await ProjectModel.deleteOne({ _id: id });
+  return result.deletedCount > 0;
 };
 
-export const updateEditorContent = (id: string, content: string): Project | null => {
-  const existing = getProjectById(id);
-  if (!existing) return null;
-
-  getDb().prepare(`
-    UPDATE projects SET editor_content = ?, updated_at = ? WHERE id = ?
-  `).run(content, now(), id);
-
-  return getProjectById(id);
+export const updateEditorContent = async (id: string, content: string): Promise<Project | null> => {
+  const doc = await ProjectModel.findByIdAndUpdate(
+    id,
+    { editorContent: content },
+    { new: true }
+  );
+  return doc ? mapProjectDoc(doc) : null;
 };
