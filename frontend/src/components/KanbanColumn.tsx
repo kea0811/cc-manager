@@ -1,7 +1,11 @@
 import * as React from 'react';
-import { Button } from '@/components/ui/button';
-import { TaskCard } from '@/components/TaskCard';
-import { Plus } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { AnimatePresence } from 'motion/react';
+import { SortableTaskCard } from '@/components/TaskCard';
 import { cn } from '@/lib/utils';
 import type { KanbanTask, KanbanStatus } from '@/types';
 
@@ -10,10 +14,10 @@ interface KanbanColumnProps {
   title: string;
   color: string;
   tasks: KanbanTask[];
-  onAddTask: (status: KanbanStatus) => void;
   onEditTask: (task: KanbanTask) => void;
   onDeleteTask: (taskId: string) => void;
   onMoveTask: (taskId: string, newStatus: KanbanStatus, position: number) => void;
+  onViewTaskDetails: (task: KanbanTask) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -21,14 +25,23 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   title,
   color,
   tasks,
-  onAddTask,
   onEditTask,
   onDeleteTask,
   onMoveTask,
+  onViewTaskDetails,
 }) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id,
+  });
+
+  const taskIds = React.useMemo(() => tasks.map((t) => t.id), [tasks]);
+
   return (
     <div
-      className="flex flex-col bg-muted/30 rounded-lg w-[280px] min-w-[280px] h-full max-h-full"
+      className={cn(
+        'flex flex-col bg-muted/30 rounded-lg w-[280px] min-w-[280px] h-full max-h-full transition-colors',
+        isOver && 'bg-primary/10 ring-2 ring-primary/50'
+      )}
       data-testid={`kanban-column-${id}`}
     >
       {/* Column Header */}
@@ -42,32 +55,26 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         </div>
       </div>
 
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto p-2 min-h-0">
-        <div className="space-y-2">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onEdit={onEditTask}
-              onDelete={onDeleteTask}
-              onMove={onMoveTask}
-            />
-          ))}
-        </div>
+      {/* Task List with Drag & Drop */}
+      <div ref={setNodeRef} className="flex-1 overflow-y-auto p-2 min-h-0">
+        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+          <AnimatePresence mode="popLayout">
+            <div className="space-y-2">
+              {tasks.map((task) => (
+                <SortableTaskCard
+                  key={task.id}
+                  task={task}
+                  onEdit={onEditTask}
+                  onDelete={onDeleteTask}
+                  onMove={onMoveTask}
+                  onViewDetails={onViewTaskDetails}
+                />
+              ))}
+            </div>
+          </AnimatePresence>
+        </SortableContext>
       </div>
 
-      {/* Add Task Button */}
-      <div className="p-2 border-t border-border/50 shrink-0">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-muted-foreground hover:text-foreground"
-          onClick={() => onAddTask(id)}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add task
-        </Button>
-      </div>
     </div>
   );
 };

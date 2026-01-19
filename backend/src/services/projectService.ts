@@ -26,14 +26,23 @@ export const createProject = async (data: CreateProject): Promise<Project> => {
   return mapProjectDoc(doc);
 };
 
-export const updateProject = async (id: string, data: UpdateProject): Promise<Project | null> => {
+export const updateProject = async (id: string, data: UpdateProject | Record<string, unknown>): Promise<Project | null> => {
   const updateData: Record<string, unknown> = {};
 
-  if (data.name !== undefined) updateData.name = data.name;
-  if (data.description !== undefined) updateData.description = data.description;
-  if (data.githubRepo !== undefined) updateData.githubRepo = data.githubRepo;
-  if (data.status !== undefined) updateData.status = data.status;
-  if (data.deployedUrl !== undefined) updateData.deployedUrl = data.deployedUrl;
+  // Handle known UpdateProject fields
+  if ('name' in data && data.name !== undefined) updateData.name = data.name;
+  if ('description' in data && data.description !== undefined) updateData.description = data.description;
+  if ('githubRepo' in data && data.githubRepo !== undefined) updateData.githubRepo = data.githubRepo;
+  if ('status' in data && data.status !== undefined) updateData.status = data.status;
+  if ('deployedUrl' in data && data.deployedUrl !== undefined) updateData.deployedUrl = data.deployedUrl;
+  if ('webUrl' in data && data.webUrl !== undefined) updateData.webUrl = data.webUrl || null;
+
+  // Handle dot-notation updates (e.g., 'developmentStatus.phase')
+  for (const [key, value] of Object.entries(data)) {
+    if (key.includes('.')) {
+      updateData[key] = value;
+    }
+  }
 
   if (Object.keys(updateData).length === 0) {
     return getProjectById(id);

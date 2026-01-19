@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export interface IChatMessage extends Document {
+export interface IChatMessage {
   _id: string;
   projectId: string;
   role: 'user' | 'assistant';

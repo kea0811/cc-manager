@@ -27,6 +27,18 @@ export const UpdateProjectSchema = z.object({
   githubRepo: gitRepoSchema.optional(),
   status: ProjectStatusSchema.optional(),
   deployedUrl: z.string().optional(),
+  webUrl: z.string().url().optional().or(z.literal('')),
+});
+
+export const DevPhaseSchema = z.enum(['idle', 'setup', 'development', 'code_review', 'unit_tests', 'e2e_tests', 'deploy', 'complete', 'error']);
+
+export const DevelopmentStatusSchema = z.object({
+  isRunning: z.boolean(),
+  phase: DevPhaseSchema,
+  message: z.string(),
+  startedAt: z.string().nullable(),
+  logs: z.array(z.string()),
+  error: z.string().nullable(),
 });
 
 export const ProjectSchema = z.object({
@@ -37,6 +49,8 @@ export const ProjectSchema = z.object({
   status: ProjectStatusSchema,
   editorContent: z.string(),
   deployedUrl: z.string().nullable(),
+  webUrl: z.string().nullable(),
+  developmentStatus: DevelopmentStatusSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -73,6 +87,10 @@ export const KanbanStatusSchema = z.enum([
   'deploy',
 ]);
 
+// Parallel development enums
+export const TestStatusSchema = z.enum(['pending', 'running', 'passed', 'failed']);
+export const MergeStatusSchema = z.enum(['pending', 'merged', 'conflict']);
+
 export const CreateKanbanTaskSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().optional(),
@@ -94,6 +112,13 @@ export const KanbanTaskSchema = z.object({
   status: KanbanStatusSchema,
   position: z.number(),
   commitUrl: z.string().nullable(),
+  // Parallel development fields
+  dependencies: z.array(z.string()),
+  branchName: z.string().nullable(),
+  testCoverage: z.number().nullable(),
+  testStatus: TestStatusSchema.nullable(),
+  mergeStatus: MergeStatusSchema.nullable(),
+  executionGroupId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -115,8 +140,33 @@ export const MoveTaskSchema = z.object({
   position: z.number().int().min(0),
 });
 
+// Execution Group schemas (for parallel task execution)
+export const ExecutionGroupStatusSchema = z.enum(['pending', 'running', 'completed', 'failed', 'aborted']);
+
+export const ExecutionGroupSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid(),
+  status: ExecutionGroupStatusSchema,
+  taskIds: z.array(z.string()),
+  containerIds: z.array(z.string()),
+  batchNumber: z.number(),
+  totalBatches: z.number(),
+  startedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+// Update dependencies schema
+export const UpdateDependenciesSchema = z.object({
+  dependencyIds: z.array(z.string()),
+});
+
 // Types
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;
+export type DevPhase = z.infer<typeof DevPhaseSchema>;
+export type DevelopmentStatus = z.infer<typeof DevelopmentStatusSchema>;
 export type CreateProject = z.infer<typeof CreateProjectSchema>;
 export type UpdateProject = z.infer<typeof UpdateProjectSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
@@ -125,9 +175,14 @@ export type CreateChatMessage = z.infer<typeof CreateChatMessageSchema>;
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 export type UpdateEditor = z.infer<typeof UpdateEditorSchema>;
 export type KanbanStatus = z.infer<typeof KanbanStatusSchema>;
+export type TestStatus = z.infer<typeof TestStatusSchema>;
+export type MergeStatus = z.infer<typeof MergeStatusSchema>;
 export type CreateKanbanTask = z.infer<typeof CreateKanbanTaskSchema>;
 export type UpdateKanbanTask = z.infer<typeof UpdateKanbanTaskSchema>;
 export type KanbanTask = z.infer<typeof KanbanTaskSchema>;
 export type MoveTask = z.infer<typeof MoveTaskSchema>;
 export type CreateTaskComment = z.infer<typeof CreateTaskCommentSchema>;
 export type TaskComment = z.infer<typeof TaskCommentSchema>;
+export type ExecutionGroupStatus = z.infer<typeof ExecutionGroupStatusSchema>;
+export type ExecutionGroup = z.infer<typeof ExecutionGroupSchema>;
+export type UpdateDependencies = z.infer<typeof UpdateDependenciesSchema>;

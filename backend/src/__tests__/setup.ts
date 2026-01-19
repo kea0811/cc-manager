@@ -1,21 +1,23 @@
 import { beforeAll, afterAll, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { initDb, getDb, closeDb } from '../db/index.js';
+import mongoose from 'mongoose';
+import { connectDb, closeDb } from '../db/index.js';
+import { ProjectModel, ChatMessageModel, KanbanTaskModel, TaskCommentModel } from '../db/index.js';
 
-// Use in-memory database for tests
-process.env.DATABASE_PATH = ':memory:';
+// Use test database
+process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cc_manager_test';
 
-beforeAll(() => {
-  initDb();
+beforeAll(async () => {
+  await connectDb();
 });
 
-beforeEach(() => {
-  const db = getDb();
+beforeEach(async () => {
   // Clear all data between tests
-  db.exec('DELETE FROM chat_messages');
-  db.exec('DELETE FROM projects');
+  await ChatMessageModel.deleteMany({});
+  await TaskCommentModel.deleteMany({});
+  await KanbanTaskModel.deleteMany({});
+  await ProjectModel.deleteMany({});
 });
 
-afterAll(() => {
-  closeDb();
+afterAll(async () => {
+  await closeDb();
 });

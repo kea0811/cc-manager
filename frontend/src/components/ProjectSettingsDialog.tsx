@@ -35,6 +35,7 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
   const [name, setName] = React.useState(project.name);
   const [description, setDescription] = React.useState(project.description || '');
   const [githubRepo, setGithubRepo] = React.useState(project.githubRepo || '');
+  const [webUrl, setWebUrl] = React.useState(project.webUrl || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -45,6 +46,7 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
       setName(project.name);
       setDescription(project.description || '');
       setGithubRepo(project.githubRepo || '');
+      setWebUrl(project.webUrl || '');
       setShowDeleteConfirm(false);
     }
   }, [open, project]);
@@ -52,7 +54,8 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
   const hasChanges =
     name !== project.name ||
     description !== (project.description || '') ||
-    githubRepo !== (project.githubRepo || '');
+    githubRepo !== (project.githubRepo || '') ||
+    webUrl !== (project.webUrl || '');
 
   const handleSave = async (): Promise<void> => {
     if (!name.trim()) return;
@@ -65,6 +68,9 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
       }
       if (githubRepo !== (project.githubRepo || '')) {
         updates.githubRepo = githubRepo.trim() || undefined;
+      }
+      if (webUrl !== (project.webUrl || '')) {
+        updates.webUrl = webUrl.trim() || undefined;
       }
       await onUpdate(updates);
       onOpenChange(false);
@@ -91,6 +97,13 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
     return httpsPattern.test(githubRepo) || sshPattern.test(githubRepo);
   };
   const isGithubUrlValid = isGitRepoValid();
+
+  const isWebUrlValid = (): boolean => {
+    if (!webUrl) return true;
+    const urlPattern = /^https?:\/\/[^\s]+$/;
+    return urlPattern.test(webUrl);
+  };
+  const webUrlValid = isWebUrlValid();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -147,6 +160,26 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
                 Linking a repo will enable Development Mode
               </p>
             )}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="settings-weburl">Deployment URL</Label>
+            <Input
+              id="settings-weburl"
+              value={webUrl}
+              onChange={(e) => setWebUrl(e.target.value)}
+              placeholder="https://myapp.example.com"
+              disabled={isLoading || isSaving}
+              data-testid="settings-weburl"
+            />
+            {webUrl && !webUrlValid && (
+              <p className="text-sm text-destructive">
+                Enter a valid URL (e.g., https://myapp.example.com)
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              The web URL where your deployed app can be accessed
+            </p>
           </div>
 
           <Separator className="my-2" />
@@ -208,7 +241,7 @@ export const ProjectSettingsDialog: React.FC<ProjectSettingsDialogProps> = ({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={!name.trim() || !hasChanges || !isGithubUrlValid || isSaving || isDeleting}
+            disabled={!name.trim() || !hasChanges || !isGithubUrlValid || !webUrlValid || isSaving || isDeleting}
             data-testid="save-settings-btn"
           >
             {isSaving ? 'Saving...' : 'Save Changes'}

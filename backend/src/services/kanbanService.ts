@@ -53,9 +53,9 @@ export const updateTask = async (id: string, data: UpdateKanbanTask): Promise<Ka
   return doc ? mapKanbanTaskDoc(doc) : null;
 };
 
-export const moveTask = async (id: string, newStatus: KanbanStatus, newPosition: number): Promise<KanbanTask | null> => {
+export const moveTask = async (id: string, newStatus: KanbanStatus, newPosition: number): Promise<KanbanTask | undefined> => {
   const task = await getTaskById(id);
-  if (!task) return null;
+  if (!task) return undefined;
 
   // Reorder tasks in target column to make room
   await KanbanTaskModel.updateMany(
@@ -70,7 +70,7 @@ export const moveTask = async (id: string, newStatus: KanbanStatus, newPosition:
     { new: true }
   );
 
-  return doc ? mapKanbanTaskDoc(doc) : null;
+  return doc ? mapKanbanTaskDoc(doc) : undefined;
 };
 
 export const deleteTask = async (id: string): Promise<boolean> => {
@@ -119,6 +119,106 @@ export const updateTaskCommitUrl = async (taskId: string, commitUrl: string): Pr
   const doc = await KanbanTaskModel.findByIdAndUpdate(
     taskId,
     { commitUrl },
+    { new: true }
+  );
+
+  return doc ? mapKanbanTaskDoc(doc) : null;
+};
+
+export interface CommitSummary {
+  totalCommits: number;
+  commits: Array<{
+    taskId: string;
+    taskTitle: string;
+    commitUrl: string;
+  }>;
+}
+
+export const getProjectCommitSummary = async (projectId: string): Promise<CommitSummary> => {
+  const tasks = await KanbanTaskModel.find({
+    projectId,
+    commitUrl: { $ne: null, $exists: true }
+  }).select('_id title commitUrl');
+
+  return {
+    totalCommits: tasks.length,
+    commits: tasks.map(t => ({
+      taskId: t._id,
+      taskTitle: t.title,
+      commitUrl: t.commitUrl!,
+    })),
+  };
+};
+
+// Parallel development functions
+
+export const updateTaskDependencies = async (taskId: string, dependencies: string[]): Promise<KanbanTask | null> => {
+  const doc = await KanbanTaskModel.findByIdAndUpdate(
+    taskId,
+    { dependencies },
+    { new: true }
+  );
+
+  return doc ? mapKanbanTaskDoc(doc) : null;
+};
+
+export const updateTaskBranch = async (taskId: string, branchName: string): Promise<KanbanTask | null> => {
+  const doc = await KanbanTaskModel.findByIdAndUpdate(
+    taskId,
+    { branchName },
+    { new: true }
+  );
+
+  return doc ? mapKanbanTaskDoc(doc) : null;
+};
+
+export const updateTaskTestStatus = async (
+  taskId: string,
+  testStatus: 'pending' | 'running' | 'passed' | 'failed',
+  testCoverage?: number
+): Promise<KanbanTask | null> => {
+  const update: Record<string, unknown> = { testStatus };
+  if (testCoverage !== undefined) {
+    update.testCoverage = testCoverage;
+  }
+
+  const doc = await KanbanTaskModel.findByIdAndUpdate(
+    taskId,
+    update,
+    { new: true }
+  );
+
+  return doc ? mapKanbanTaskDoc(doc) : null;
+};
+
+export const updateTaskMergeStatus = async (
+  taskId: string,
+  mergeStatus: 'pending' | 'merged' | 'conflict' | null
+): Promise<KanbanTask | null> => {
+  const doc = await KanbanTaskModel.findByIdAndUpdate(
+    taskId,
+    { mergeStatus },
+    { new: true }
+  );
+
+  return doc ? mapKanbanTaskDoc(doc) : null;
+};
+
+export const clearAllMergeConflicts = async (projectId: string): Promise<number> => {
+  const result = await KanbanTaskModel.updateMany(
+    { projectId, mergeStatus: 'conflict' },
+    { mergeStatus: null }
+  );
+  return result.modifiedCount;
+};
+
+export const updateTaskExecutionGroup = async (
+  taskId: string,
+  executionGroupId: string | null
+): Promise<KanbanTask | null> => {
+  const doc = await KanbanTaskModel.findByIdAndUpdate(
+    taskId,
+    { executionGroupId },
     { new: true }
   );
 

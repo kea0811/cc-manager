@@ -1,6 +1,17 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export interface IProject extends Document {
+export type DevPhase = 'idle' | 'setup' | 'development' | 'code_review' | 'unit_tests' | 'e2e_tests' | 'deploy' | 'complete' | 'error';
+
+export interface IDevelopmentStatus {
+  isRunning: boolean;
+  phase: DevPhase;
+  message: string;
+  startedAt: Date | null;
+  logs: string[];
+  error: string | null;
+}
+
+export interface IProject {
   _id: string;
   name: string;
   description: string | null;
@@ -8,9 +19,27 @@ export interface IProject extends Document {
   status: 'draft' | 'development' | 'deployed';
   editorContent: string;
   deployedUrl: string | null;
+  webUrl: string | null;
+  developmentStatus: IDevelopmentStatus;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const DevelopmentStatusSchema = new Schema<IDevelopmentStatus>(
+  {
+    isRunning: { type: Boolean, default: false },
+    phase: {
+      type: String,
+      enum: ['idle', 'setup', 'development', 'code_review', 'unit_tests', 'e2e_tests', 'deploy', 'complete', 'error'],
+      default: 'idle',
+    },
+    message: { type: String, default: '' },
+    startedAt: { type: Date, default: null },
+    logs: { type: [String], default: [] },
+    error: { type: String, default: null },
+  },
+  { _id: false }
+);
 
 const ProjectSchema = new Schema<IProject>(
   {
@@ -25,6 +54,18 @@ const ProjectSchema = new Schema<IProject>(
     },
     editorContent: { type: String, default: '' },
     deployedUrl: { type: String, default: null },
+    webUrl: { type: String, default: null },
+    developmentStatus: {
+      type: DevelopmentStatusSchema,
+      default: () => ({
+        isRunning: false,
+        phase: 'idle',
+        message: '',
+        startedAt: null,
+        logs: [],
+        error: null,
+      }),
+    },
   },
   {
     timestamps: true,

@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, ExternalLink, Github } from 'lucide-react';
+import { Trash2, ExternalLink, Github, GitCommit } from 'lucide-react';
 import type { Project } from '@/types';
 
 interface ProjectCardProps {
   project: Project;
+  commitCount?: number;
   onClick: () => void;
   onDelete: () => void;
 }
@@ -32,7 +33,7 @@ const StatusBadge: React.FC<{ status: Project['status'] }> = ({ status }) => {
   );
 };
 
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDelete }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, commitCount = 0, onClick, onDelete }) => {
   const handleDelete = (e: React.MouseEvent): void => {
     e.stopPropagation();
     onDelete();
@@ -55,7 +56,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDe
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>Updated {formatDate(project.updatedAt)}</span>
             {project.githubRepo && (
               <a
@@ -68,6 +69,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onDe
                 <Github className="h-4 w-4" />
               </a>
             )}
+            <span className="inline-flex items-center gap-1">
+              <GitCommit className="h-4 w-4 text-emerald-500" />
+              <span className={commitCount > 0 ? 'text-emerald-600 font-medium' : ''}>
+                {commitCount} {commitCount === 1 ? 'commit' : 'commits'}
+              </span>
+            </span>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="icon" onClick={onClick}>

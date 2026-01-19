@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mongodb:
     image: mongo:7
@@ -26,20 +24,18 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@mongodb:27017/cc_manager?authSource=admin
+      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@192.168.50.74:27018/cc_manager?authSource=admin
       - WORKSPACE_PATH=/workspace
       # Support both token variable names for compatibility
       - CLAUDE_CODE_TOKEN=${CLAUDE_CODE_TOKEN:-}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_TOKEN:-}
-    depends_on:
-      mongodb:
-        condition: service_healthy
+      # SSH private key for git operations (base64 encoded)
+      - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY:-}
     volumes:
       - cc-workspace:/workspace
       # Mount Docker socket for spawning development containers
       - /var/run/docker.sock:/var/run/docker.sock
-      # Mount SSH keys for git clone with SSH URLs (writeable for known_hosts updates)
-      - ~/.ssh:/home/claudeuser/.ssh
+      # SSH key is passed via environment variable SSH_PRIVATE_KEY
       # Mount the claude-project directory for deployments
       - /volume1/docker/claude-project:/volume1/docker/claude-project
       # Optional: Mount Claude config directory
@@ -63,19 +59,16 @@ services:
       - VITE_API_URL=http://backend:3001
     restart: unless-stopped
 
-  # E2E Test Backend - uses test MongoDB database
+  # E2E Test Backend - uses test MongoDB database on NAS
   backend-test:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@mongodb:27017/cc_manager_test?authSource=admin
+      - MONGODB_URI=mongodb://ccadmin:ccmanager2024@192.168.50.74:27018/cc_manager_test?authSource=admin
       - CLAUDE_CODE_TOKEN=${CLAUDE_CODE_TOKEN:-}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_TOKEN:-}
-    depends_on:
-      mongodb:
-        condition: service_healthy
     profiles:
       - test
 
@@ -110,5 +103,5 @@ services:
       - test
 
 volumes:
-  mongodb-data:
   cc-workspace:
+  mongodb-data:

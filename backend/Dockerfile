@@ -10,8 +10,8 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install bash, git, ssh, docker-cli, and build dependencies for native modules (better-sqlite3)
-RUN apk add --no-cache bash git openssh-client docker-cli python3 make g++
+# Install bash, git, ssh, docker-cli, expect (for unbuffer), and build dependencies for native modules
+RUN apk add --no-cache bash git openssh-client docker-cli expect python3 make g++
 
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code

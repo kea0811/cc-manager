@@ -1,8 +1,30 @@
 import * as React from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { motion } from 'motion/react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { GripVertical, Pencil, Trash2, ChevronLeft, ChevronRight, GitCommit, MessageSquare, ChevronDown, ChevronUp, Send, X } from 'lucide-react';
+import {
+  GripVertical,
+  Pencil,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  GitCommit,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  X,
+  Link2,
+  GitBranch,
+  TestTube,
+  GitMerge,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Loader2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { KanbanTask, KanbanStatus, TaskComment } from '@/types';
 import { KANBAN_COLUMNS } from '@/types';
@@ -13,6 +35,7 @@ interface TaskCardProps {
   onEdit: (task: KanbanTask) => void;
   onDelete: (taskId: string) => void;
   onMove: (taskId: string, newStatus: KanbanStatus, position: number) => void;
+  onViewDetails?: (task: KanbanTask) => void;
   isDragging?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
@@ -22,6 +45,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onEdit,
   onDelete,
   onMove,
+  onViewDetails,
   isDragging = false,
   dragHandleProps,
 }) => {
@@ -105,6 +129,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleCardClick = (): void => {
+    if (onViewDetails) {
+      onViewDetails(task);
+    }
+  };
+
   return (
     <Card
       className={cn(
@@ -113,12 +143,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         isDragging && 'shadow-lg ring-2 ring-primary/50 opacity-90'
       )}
       data-testid={`task-card-${task.id}`}
+      onClick={handleCardClick}
     >
       <div className="p-3">
         <div className="flex items-start gap-2">
+          {/* Drag Handle */}
           <div
             {...dragHandleProps}
-            className="mt-0.5 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity"
+            className="mt-0.5 cursor-grab active:cursor-grabbing opacity-50 group-hover:opacity-100 transition-opacity touch-none"
+            onClick={(e) => e.stopPropagation()}
           >
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </div>
@@ -131,6 +164,75 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             )}
           </div>
         </div>
+
+        {/* Parallel Development Info */}
+        {(task.dependencies.length > 0 || task.branchName || task.testCoverage !== null || task.mergeStatus) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            {/* Dependencies */}
+            {task.dependencies.length > 0 && (
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400"
+                title={`Depends on ${task.dependencies.length} task(s)`}
+              >
+                <Link2 className="h-3 w-3" />
+                <span>{task.dependencies.length}</span>
+              </div>
+            )}
+
+            {/* Branch Name */}
+            {task.branchName && (
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 max-w-[120px]"
+                title={task.branchName}
+              >
+                <GitBranch className="h-3 w-3 shrink-0" />
+                <span className="truncate">{task.branchName.replace('feature/', '')}</span>
+              </div>
+            )}
+
+            {/* Test Coverage */}
+            {task.testStatus && (
+              <div
+                className={cn(
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded',
+                  task.testStatus === 'passed' && 'bg-green-500/20 text-green-400',
+                  task.testStatus === 'failed' && 'bg-red-500/20 text-red-400',
+                  task.testStatus === 'running' && 'bg-yellow-500/20 text-yellow-400',
+                  task.testStatus === 'pending' && 'bg-slate-500/20 text-slate-400'
+                )}
+                title={`Test coverage: ${task.testCoverage ?? 0}%`}
+              >
+                {task.testStatus === 'running' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : task.testStatus === 'passed' ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : task.testStatus === 'failed' ? (
+                  <AlertTriangle className="h-3 w-3" />
+                ) : (
+                  <Clock className="h-3 w-3" />
+                )}
+                <TestTube className="h-3 w-3" />
+                {task.testCoverage !== null && <span>{task.testCoverage}%</span>}
+              </div>
+            )}
+
+            {/* Merge Status */}
+            {task.mergeStatus && (
+              <div
+                className={cn(
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded',
+                  task.mergeStatus === 'merged' && 'bg-purple-500/20 text-purple-400',
+                  task.mergeStatus === 'conflict' && 'bg-red-500/20 text-red-400',
+                  task.mergeStatus === 'pending' && 'bg-yellow-500/20 text-yellow-400'
+                )}
+                title={`Merge status: ${task.mergeStatus}`}
+              >
+                <GitMerge className="h-3 w-3" />
+                <span className="capitalize">{task.mergeStatus}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Commit Link */}
         {task.commitUrl && (
@@ -262,5 +364,65 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         )}
       </div>
     </Card>
+  );
+};
+
+// Sortable wrapper for drag and drop with smooth animations
+interface SortableTaskCardProps {
+  task: KanbanTask;
+  onEdit: (task: KanbanTask) => void;
+  onDelete: (taskId: string) => void;
+  onMove: (taskId: string, newStatus: KanbanStatus, position: number) => void;
+  onViewDetails: (task: KanbanTask) => void;
+}
+
+export const SortableTaskCard: React.FC<SortableTaskCardProps> = ({
+  task,
+  onEdit,
+  onDelete,
+  onMove,
+  onViewDetails,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      layout
+      layoutId={task.id}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{
+        opacity: isDragging ? 0.5 : 1,
+        scale: 1,
+        x: transform?.x ?? 0,
+        y: transform?.y ?? 0,
+      }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{
+        type: 'spring',
+        stiffness: 500,
+        damping: 30,
+        opacity: { duration: 0.2 },
+      }}
+      style={{
+        zIndex: isDragging ? 50 : 'auto',
+      }}
+    >
+      <TaskCard
+        task={task}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onMove={onMove}
+        onViewDetails={onViewDetails}
+        isDragging={isDragging}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </motion.div>
   );
 };

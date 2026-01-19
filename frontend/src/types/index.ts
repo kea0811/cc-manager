@@ -8,6 +8,7 @@ export interface Project {
   status: ProjectStatus;
   editorContent: string;
   deployedUrl: string | null;
+  webUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,6 +24,16 @@ export interface UpdateProjectData {
   githubRepo?: string;
   status?: ProjectStatus;
   deployedUrl?: string;
+  webUrl?: string;
+}
+
+export interface CommitSummary {
+  totalCommits: number;
+  commits: Array<{
+    taskId: string;
+    taskTitle: string;
+    commitUrl: string;
+  }>;
 }
 
 export type ChatRole = 'user' | 'assistant';
@@ -50,6 +61,11 @@ export type KanbanStatus =
   | 'done_e2e_testing'
   | 'deploy';
 
+// Parallel development types
+export type TestStatus = 'pending' | 'running' | 'passed' | 'failed';
+export type MergeStatus = 'pending' | 'merged' | 'conflict';
+export type ExecutionGroupStatus = 'pending' | 'running' | 'completed' | 'failed' | 'aborted';
+
 export interface KanbanTask {
   id: string;
   projectId: string;
@@ -58,6 +74,28 @@ export interface KanbanTask {
   status: KanbanStatus;
   position: number;
   commitUrl: string | null;
+  // Parallel development fields
+  dependencies: string[];
+  branchName: string | null;
+  testCoverage: number | null;
+  testStatus: TestStatus | null;
+  mergeStatus: MergeStatus | null;
+  executionGroupId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExecutionGroup {
+  id: string;
+  projectId: string;
+  status: ExecutionGroupStatus;
+  taskIds: string[];
+  containerIds: string[];
+  batchNumber: number;
+  totalBatches: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +153,7 @@ export type StreamEventType =
   | 'user_message'   // User message stored
   | 'assistant_message'  // Assistant message stored
   | 'editor_update'  // Editor content updated
+  | 'tasks_created'  // New tasks auto-created from PRD
   | 'done';          // Stream complete
 
 export interface StreamEvent {
@@ -132,6 +171,9 @@ export interface StreamEvent {
     addedLines: number;
     removedLines: number;
   };
+  // For tasks_created event
+  tasks?: Array<{ title: string }>;
+  count?: number;
 }
 
 // Streaming state for UI
@@ -178,7 +220,30 @@ export type DevEventType =
   | 'deploy_complete'
   | 'error'
   | 'aborted'
-  | 'done';
+  | 'done'
+  | 'reconnected'
+  // Parallel development events
+  | 'plan'
+  | 'batch_start'
+  | 'batch_complete'
+  | 'task_setup'
+  | 'task_claude'
+  | 'task_commit'
+  | 'task_error'
+  | 'merge_start'
+  | 'merge_complete'
+  | 'merge_conflict'
+  | 'merge_batch_complete'
+  // Code review events
+  | 'review_start'
+  | 'review_task_start'
+  | 'review_progress'
+  | 'review_task_complete'
+  | 'review_fix_start'
+  | 'review_fix_progress'
+  | 'review_fix_complete'
+  | 'review_task_failed'
+  | 'review_batch_complete';
 
 export interface DevStreamEvent {
   type: DevEventType;
@@ -195,14 +260,43 @@ export interface DevStreamEvent {
   // Init events
   projectId?: string;
   projectName?: string;
+  mode?: 'sequential' | 'parallel';
   // Tasks list
   total?: number;
   tasks?: Array<{ id: string; title: string }>;
   // Claude events (nested)
   content?: string;
   tool_name?: string;
+  event?: Record<string, unknown>; // Nested claude event for parallel
   // Done event
   success?: boolean;
+  // Parallel batch events
+  batchNumber?: number;
+  totalBatches?: number;
+  taskCount?: number;
+  branchName?: string;
+  successCount?: number;
+  failedCount?: number;
+  results?: Array<{ taskId: string; success: boolean; branchName: string; commitUrl?: string; error?: string }>;
+  // Merge events
+  branches?: string[];
+  error?: string;
+  // Plan event
+  plan?: Array<{
+    batchNumber: number;
+    taskIds: string[];
+    tasks: Array<{ id: string; title: string } | null>;
+  }>;
+  batches?: number;
+  // Code review events
+  attempt?: number;
+  maxAttempts?: number;
+  qualityScore?: number;
+  passed?: boolean;
+  summary?: string;
+  issues?: string[];
+  suggestions?: string[];
+  retriesExhausted?: boolean;
 }
 
 export interface DevStreamState {
@@ -213,5 +307,72 @@ export interface DevStreamState {
   currentTool: string | null;
   setupMessage: string | null;
   completedTasks: string[];
+  errors: string[];
+}
+
+// ============ Parallel Execution Types ============
+
+export interface UpdateDependenciesData {
+  dependencyIds: string[];
+}
+
+export type ParallelEventType =
+  | 'plan_ready'
+  | 'batch_start'
+  | 'batch_complete'
+  | 'task_start'
+  | 'task_progress'
+  | 'task_complete'
+  | 'task_error'
+  | 'coverage_result'
+  | 'merge_start'
+  | 'merge_complete'
+  | 'merge_conflict'
+  | 'execution_complete'
+  | 'execution_error';
+
+export interface ParallelStreamEvent {
+  type: ParallelEventType;
+  // Plan ready
+  batches?: string[][];
+  totalTasks?: number;
+  totalBatches?: number;
+  // Batch events
+  batchNumber?: number;
+  groupId?: string;
+  taskIds?: string[];
+  taskCount?: number;
+  success?: boolean;
+  completedTasks?: string[];
+  failedTasks?: Array<{ taskId: string; error?: string }>;
+  // Task events
+  taskId?: string;
+  taskTitle?: string;
+  branchName?: string;
+  // Coverage
+  coverage?: number;
+  coveragePassed?: boolean;
+  uncoveredFiles?: string[];
+  // Merge events
+  commitHash?: string;
+  conflictFiles?: string[];
+  // Error
+  error?: string;
+  cyclicTasks?: string[];
+}
+
+export interface ParallelStreamState {
+  isRunning: boolean;
+  currentBatch: number;
+  totalBatches: number;
+  activeTasks: Array<{
+    taskId: string;
+    title: string;
+    branchName: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    coverage?: number;
+    coveragePassed?: boolean;
+  }>;
+  completedBatches: number;
   errors: string[];
 }

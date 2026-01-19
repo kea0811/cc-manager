@@ -13,6 +13,8 @@ import type {
   CreateTaskCommentData,
   StreamEvent,
   DevStreamEvent,
+  UpdateDependenciesData,
+  CommitSummary,
 } from '@/types';
 
 export interface ProcessResponse {
@@ -67,6 +69,33 @@ export const projectsApi = {
 
   deleteKanbanTask: (id: string, taskId: string): Promise<void> =>
     apiClient.delete(`/projects/${id}/kanban/${taskId}`),
+
+  // Task Dependencies API
+  updateTaskDependencies: (id: string, taskId: string, data: UpdateDependenciesData): Promise<KanbanTask> =>
+    apiClient.put(`/projects/${id}/kanban/${taskId}/dependencies`, data),
+
+  getTaskDependencies: (id: string, taskId: string): Promise<{
+    taskId: string;
+    dependencies: Array<{ id: string; title: string; status: string }>;
+    dependents: Array<{ id: string; title: string; status: string }>;
+    areDependenciesSatisfied: boolean;
+  }> => apiClient.get(`/projects/${id}/kanban/${taskId}/dependencies`),
+
+  getExecutionPlan: (id: string): Promise<{
+    batches: Array<Array<{ id: string; title: string; dependencies: string[] }>>;
+    totalTasks: number;
+    totalBatches: number;
+    hasCycles: boolean;
+    cyclicTasks: string[];
+  }> => apiClient.get(`/projects/${id}/execution-plan`),
+
+  // Commits API
+  getCommitSummary: (id: string): Promise<CommitSummary> =>
+    apiClient.get(`/projects/${id}/commits`),
+
+  // Parse new tasks from PRD (for deployed/development projects)
+  parseNewTasks: (id: string): Promise<{ success: boolean; tasks: KanbanTask[]; message?: string }> =>
+    apiClient.post(`/projects/${id}/parse-new-tasks`, {}),
 
   // Development API
   startDevelop: (id: string): Promise<{ success: boolean; tasks: KanbanTask[] }> =>
@@ -201,4 +230,69 @@ export const projectsApi = {
    */
   abortDevelopmentStream: (id: string): Promise<{ success: boolean }> =>
     apiClient.post(`/projects/${id}/develop-stream/abort`, {}),
+
+  /**
+   * Get current development status for a project
+   */
+  getDevelopmentStatus: (id: string): Promise<{
+    isRunning: boolean;
+    phase: string;
+    message: string;
+    startedAt: string | null;
+    logs: string[];
+    error: string | null;
+    hasActiveStream: boolean;
+  }> => apiClient.get(`/projects/${id}/development-status`),
+
+  // ============ Parallel Development Streaming API ============
+
+  /**
+   * Stream parallel development pipeline via Server-Sent Events
+   * @returns EventSource and abort function
+   */
+  streamParallelDevelopment: (
+    id: string,
+    callbacks: {
+      onEvent: (event: DevStreamEvent) => void;
+      onError: (error: Error) => void;
+      onComplete: () => void;
+    }
+  ): { eventSource: EventSource; abort: () => void } => {
+    const url = `/api/projects/${id}/develop-parallel-stream`;
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as DevStreamEvent;
+        callbacks.onEvent(data);
+
+        if (data.type === 'done' || data.type === 'aborted') {
+          eventSource.close();
+          callbacks.onComplete();
+        }
+      } catch (err) {
+        console.error('Failed to parse parallel dev stream event:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('Parallel Dev EventSource error:', err);
+      eventSource.close();
+      callbacks.onError(new Error('Connection lost'));
+    };
+
+    return {
+      eventSource,
+      abort: () => {
+        eventSource.close();
+        fetch(`/api/projects/${id}/develop-parallel-stream/abort`, { method: 'POST' }).catch(() => {});
+      },
+    };
+  },
+
+  /**
+   * Abort parallel development stream for a project
+   */
+  abortParallelDevelopmentStream: (id: string): Promise<{ success: boolean }> =>
+    apiClient.post(`/projects/${id}/develop-parallel-stream/abort`, {}),
 };

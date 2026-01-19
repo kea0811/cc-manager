@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -8,16 +8,21 @@ import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog';
 import { KanbanBoard, KanbanBoardHandle } from '@/components/KanbanBoard';
 import { projectsApi } from '@/api/projects';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Settings, MessageSquare, Kanban, Rocket, Play, Loader2, ExternalLink, CheckCircle, Upload } from 'lucide-react';
+import { ArrowLeft, Settings, MessageSquare, Kanban, Rocket, Play, Loader2, ExternalLink, CheckCircle, Upload, ListPlus } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
-import type { Project, ChatMessage, UpdateProjectData, StreamingState, StreamEvent } from '@/types';
+import type { Project, ChatMessage, UpdateProjectData, StreamingState } from '@/types';
 
 type WorkspaceView = 'chat' | 'kanban';
 
 export const Workspace: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+
+  // Get initial view from URL or default to 'chat'
+  const initialView = (searchParams.get('view') as WorkspaceView) || 'chat';
 
   const [project, setProject] = React.useState<Project | null>(null);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
@@ -26,9 +31,16 @@ export const Workspace: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
-  const [activeView, setActiveView] = React.useState<WorkspaceView>('chat');
+  const [activeView, setActiveViewState] = React.useState<WorkspaceView>(initialView);
   const [isStartingDev, setIsStartingDev] = React.useState(false);
+
+  // Update both state and URL when view changes
+  const setActiveView = React.useCallback((view: WorkspaceView) => {
+    setActiveViewState(view);
+    setSearchParams({ view }, { replace: true });
+  }, [setSearchParams]);
   const [isDeploying, setIsDeploying] = React.useState(false);
+  const [isParsingTasks, setIsParsingTasks] = React.useState(false);
   const kanbanRef = React.useRef<KanbanBoardHandle>(null);
 
   // Streaming state
@@ -98,42 +110,43 @@ export const Workspace: React.FC = () => {
     // Add user message immediately for instant feedback
     setMessages((prev) => [...prev, optimisticMessage]);
 
-    // Initialize streaming state
+    // Set thinking state
     setStreamingState({
-      phase: 'connecting',
+      phase: 'thinking',
       content: '',
       currentTool: null,
       error: null,
     });
 
-    // Start streaming
+    // Track if we've received the real user message
+    let userMessageId: string | null = null;
+
+    // Use streaming API
     const { abort } = projectsApi.streamProcess(id, content, {
-      onEvent: (event: StreamEvent) => {
+      onEvent: (event) => {
         switch (event.type) {
           case 'user_message':
-            // Replace optimistic message with real one from server
+            // Replace temp message with real user message
             if (event.message && 'id' in event.message) {
+              userMessageId = event.message.id;
               setMessages((prev) => {
                 const withoutTemp = prev.filter((m) => m.id !== tempId);
                 return [...withoutTemp, event.message as ChatMessage];
               });
             }
-            setStreamingState((prev) => ({ ...prev, phase: 'thinking' }));
             break;
 
           case 'assistant':
             // Streaming text content
-            if (event.message?.content) {
-              setStreamingState((prev) => ({
-                ...prev,
-                phase: 'writing',
-                content: prev.content + event.message!.content,
-              }));
-            }
+            setStreamingState((prev) => ({
+              ...prev,
+              phase: 'writing',
+              content: prev.content + (event.content || ''),
+            }));
             break;
 
           case 'tool_use':
-            // Claude is using a tool
+            // Tool is being called
             setStreamingState((prev) => ({
               ...prev,
               phase: 'tool_use',
@@ -142,23 +155,29 @@ export const Workspace: React.FC = () => {
             break;
 
           case 'tool_result':
-            // Tool finished, back to thinking
+            // Tool completed
             setStreamingState((prev) => ({
               ...prev,
-              phase: 'thinking',
+              phase: 'writing',
               currentTool: null,
             }));
             break;
 
           case 'assistant_message':
-            // Final assistant message saved to DB
+            // Final assistant message stored
             if (event.message && 'id' in event.message) {
               setMessages((prev) => [...prev, event.message as ChatMessage]);
+              setStreamingState({
+                phase: 'idle',
+                content: '',
+                currentTool: null,
+                error: null,
+              });
             }
             break;
 
           case 'editor_update':
-            // Editor content was updated
+            // Editor content updated
             if (event.content) {
               setEditorContent(event.content);
               setProject((prev) => prev ? { ...prev, editorContent: event.content! } : null);
@@ -174,27 +193,48 @@ export const Workspace: React.FC = () => {
             }
             break;
 
+          case 'tasks_created':
+            // New tasks were auto-created from updated PRD
+            if (event.count && event.count > 0) {
+              toast({
+                title: 'New Tasks Created',
+                description: `${event.count} task${event.count > 1 ? 's' : ''} added to Kanban`,
+              });
+              // Refresh kanban board
+              kanbanRef.current?.refresh();
+            }
+            break;
+
           case 'error':
-            setStreamingState((prev) => ({
-              ...prev,
+            setStreamingState({
               phase: 'error',
+              content: '',
+              currentTool: null,
               error: event.error || 'Unknown error',
-            }));
+            });
+            // Remove optimistic message if we haven't received real user message yet
+            if (!userMessageId) {
+              setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            }
+            toast({
+              title: 'Error',
+              description: event.error || 'Unknown error',
+              variant: 'destructive',
+            });
             break;
 
           case 'done':
-            // Stream complete
+            // Stream completed
             setStreamingState({
               phase: 'idle',
               content: '',
               currentTool: null,
               error: null,
             });
-            abortRef.current = null;
             break;
         }
       },
-      onError: (error: Error) => {
+      onError: (error) => {
         setStreamingState({
           phase: 'error',
           content: '',
@@ -202,22 +242,21 @@ export const Workspace: React.FC = () => {
           error: error.message,
         });
         // Remove optimistic message on error
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        toast({ title: 'Error', description: error.message, variant: 'destructive' });
-        abortRef.current = null;
+        if (!userMessageId) {
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        }
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
       },
       onComplete: () => {
-        setStreamingState({
-          phase: 'idle',
-          content: '',
-          currentTool: null,
-          error: null,
-        });
         abortRef.current = null;
       },
     });
 
-    // Store abort function
+    // Store abort function for cancellation
     abortRef.current = abort;
   };
 
@@ -338,6 +377,37 @@ export const Workspace: React.FC = () => {
     }
   };
 
+  const handleParseNewTasks = async (): Promise<void> => {
+    if (!id) return;
+    setIsParsingTasks(true);
+    try {
+      const result = await projectsApi.parseNewTasks(id);
+      if (result.tasks.length > 0) {
+        toast({
+          title: 'Tasks Created',
+          description: `Created ${result.tasks.length} new task${result.tasks.length > 1 ? 's' : ''} from PRD`,
+        });
+        // Refresh kanban board
+        kanbanRef.current?.refresh();
+        // Switch to kanban view to show new tasks
+        setActiveView('kanban');
+      } else {
+        toast({
+          title: 'No New Tasks',
+          description: result.message || 'All tasks from PRD already exist',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to parse tasks',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsParsingTasks(false);
+    }
+  };
+
   if (isLoading || !project) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -364,9 +434,9 @@ export const Workspace: React.FC = () => {
               ) : (
                 <p className="text-sm text-muted-foreground">{project.status}</p>
               )}
-              {project.deployedUrl && (
+              {project.webUrl && (
                 <a
-                  href={project.deployedUrl}
+                  href={project.webUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
@@ -415,7 +485,8 @@ export const Workspace: React.FC = () => {
               size="sm"
               className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
               onClick={handleStartDevelop}
-              disabled={isStartingDev}
+              disabled={isStartingDev || !project.githubRepo}
+              title={!project.githubRepo ? 'Configure GitHub repo in settings first' : undefined}
             >
               {isStartingDev ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -426,14 +497,29 @@ export const Workspace: React.FC = () => {
             </Button>
           )}
 
-          {project.status === 'development' && (
+          {(project.status === 'development' || project.status === 'deployed') && (
             <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleParseNewTasks}
+                disabled={isParsingTasks || isDeploying}
+                title="Parse PRD and add new tasks"
+              >
+                {isParsingTasks ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ListPlus className="h-4 w-4" />
+                )}
+                {isParsingTasks ? 'Parsing...' : 'Add Tasks'}
+              </Button>
               <Button
                 variant="default"
                 size="sm"
                 className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                 onClick={handleDevelopAll}
-                disabled={isDeploying}
+                disabled={isDeploying || isParsingTasks}
               >
                 <Play className="h-4 w-4" />
                 Continue Development
@@ -443,7 +529,7 @@ export const Workspace: React.FC = () => {
                 size="sm"
                 className="gap-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700"
                 onClick={handleDeploy}
-                disabled={isDeploying}
+                disabled={isDeploying || isParsingTasks}
               >
                 {isDeploying ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -455,6 +541,7 @@ export const Workspace: React.FC = () => {
             </>
           )}
 
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="icon"
@@ -497,6 +584,7 @@ export const Workspace: React.FC = () => {
               onSave={handleSaveEditor}
               isDirty={isDirty}
               isSaving={isSaving}
+              savedContent={project.editorContent}
             />
           </div>
         </div>

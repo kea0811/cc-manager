@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export interface ITaskComment extends Document {
+export interface ITaskComment {
   _id: string;
   taskId: string;
   content: string;

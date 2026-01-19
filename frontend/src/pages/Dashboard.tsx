@@ -6,12 +6,14 @@ import { CreateProjectDialog } from '@/components/CreateProjectDialog';
 import { projectsApi } from '@/api/projects';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, FolderOpen } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import type { Project, CreateProjectData } from '@/types';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [projects, setProjects] = React.useState<Project[]>([]);
+  const [commitCounts, setCommitCounts] = React.useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isCreating, setIsCreating] = React.useState(false);
@@ -20,6 +22,23 @@ export const Dashboard: React.FC = () => {
     try {
       const data = await projectsApi.getAll();
       setProjects(data);
+
+      // Fetch commit counts for all projects in parallel
+      const commitPromises = data.map(async (project) => {
+        try {
+          const summary = await projectsApi.getCommitSummary(project.id);
+          return { id: project.id, count: summary.totalCommits };
+        } catch {
+          return { id: project.id, count: 0 };
+        }
+      });
+
+      const results = await Promise.all(commitPromises);
+      const counts: Record<string, number> = {};
+      results.forEach(({ id, count }) => {
+        counts[id] = count;
+      });
+      setCommitCounts(counts);
     } catch {
       toast({ title: 'Error', description: 'Failed to load projects', variant: 'destructive' });
     } finally {
@@ -71,10 +90,13 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-3xl font-bold">Projects</h1>
           <p className="text-muted-foreground">Manage your development projects</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)} data-testid="create-project-btn">
-          <Plus className="mr-2 h-4 w-4" />
-          New Project
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button onClick={() => setIsCreateOpen(true)} data-testid="create-project-btn">
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
+        </div>
       </div>
 
       {projects.length === 0 ? (
@@ -93,6 +115,7 @@ export const Dashboard: React.FC = () => {
             <ProjectCard
               key={project.id}
               project={project}
+              commitCount={commitCounts[project.id] ?? 0}
               onClick={() => navigate(`/projects/${project.id}`)}
               onDelete={() => handleDeleteProject(project.id)}
             />
